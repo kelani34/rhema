@@ -94,25 +94,43 @@ pub fn run() {
                 log::warn!("Bible database not found at {}", db_path.display());
             }
 
-            // Try to load ONNX embedding model and pre-computed verse index
-            // Prefer INT8 quantized model (~571MB) over FP32 (~2.4GB)
-            let base_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
-            let model_path = {
-                let int8 = base_dir.join("models/qwen3-embedding-0.6b-int8/model_quantized.onnx");
-                let fp32 = base_dir.join("models/qwen3-embedding-0.6b/model.onnx");
-                if int8.exists() {
-                    log::info!("Using INT8 quantized ONNX model");
-                    int8
-                } else if fp32.exists() {
-                    log::info!("Using FP32 ONNX model (INT8 not found)");
-                    fp32
-                } else {
-                    fp32
+            // Try to load ONNX embedding model and pre-computed verse index.
+            // Assets live under the workspace root during `tauri dev`, and are
+            // shipped as bundled resources in a production install. Try each
+            // base and use whichever actually contains the model + tokenizer.
+            // Prefer INT8 quantized model (~571MB) over FP32 (~2.4GB).
+            let candidate_bases: Vec<std::path::PathBuf> = {
+                let mut bases =
+                    vec![std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")];
+                if let Ok(resource_dir) = app.path().resource_dir() {
+                    bases.push(resource_dir);
                 }
+                bases
             };
-            let tokenizer_path = base_dir.join("models/qwen3-embedding-0.6b/tokenizer.json");
-            let embeddings_path = base_dir.join("embeddings/kjv-qwen3-0.6b.bin");
-            let ids_path = base_dir.join("embeddings/kjv-qwen3-0.6b-ids.bin");
+            let resolve_assets = |base: &std::path::Path| {
+                let int8_dir = base.join("models/qwen3-embedding-0.6b-int8");
+                let (model_path, tokenizer_path) =
+                    if int8_dir.join("model_quantized.onnx").exists() {
+                        (
+                            int8_dir.join("model_quantized.onnx"),
+                            int8_dir.join("tokenizer.json"),
+                        )
+                    } else {
+                        let fp32_dir = base.join("models/qwen3-embedding-0.6b");
+                        (fp32_dir.join("model.onnx"), fp32_dir.join("tokenizer.json"))
+                    };
+                (
+                    model_path,
+                    tokenizer_path,
+                    base.join("embeddings/kjv-qwen3-0.6b.bin"),
+                    base.join("embeddings/kjv-qwen3-0.6b-ids.bin"),
+                )
+            };
+            let (model_path, tokenizer_path, embeddings_path, ids_path) = candidate_bases
+                .iter()
+                .map(|base| resolve_assets(base))
+                .find(|(model, tokenizer, _, _)| model.exists() && tokenizer.exists())
+                .unwrap_or_else(|| resolve_assets(&candidate_bases[0]));
 
             if model_path.exists() && tokenizer_path.exists() {
                 use rhema_detection::semantic::embedder::TextEmbedder;

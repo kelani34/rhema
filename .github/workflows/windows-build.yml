@@ -95,12 +95,71 @@ jobs:
             Write-Host "data/rhema.db restored from cache; skipping rebuild."
           }
 
+      # --- Semantic search assets (ONNX model + verse embeddings) ---
+      # Generated from scratch on cache miss: HuggingFace export + INT8
+      # quantize (Python/optimum) then a Rust precompute over all verses.
+
+      - name: Cache ONNX embedding model
+        uses: actions/cache@v4
+        with:
+          path: |
+            models/qwen3-embedding-0.6b
+            models/qwen3-embedding-0.6b-int8
+          key: onnx-model-${{ hashFiles('data/download-model.ts', 'data/lib/python-env.ts') }}
+
+      - name: Cache Python venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('data/download-model.ts', 'data/lib/python-env.ts') }}
+
+      - name: Cache verse embeddings
+        uses: actions/cache@v4
+        with:
+          path: embeddings
+          key: embeddings-${{ hashFiles('data/compute-embeddings.ts', 'data/build-bible-db.ts', 'data/download-model.ts') }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Export + quantize ONNX embedding model
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "models/qwen3-embedding-0.6b-int8/model_quantized.onnx")) {
+            bun run download:model
+          } else {
+            Write-Host "INT8 ONNX model restored from cache; skipping export."
+          }
+          # The app reads the tokenizer from the INT8 dir; ensure it's present.
+          $int8Tok = "models/qwen3-embedding-0.6b-int8/tokenizer.json"
+          $fp32Tok = "models/qwen3-embedding-0.6b/tokenizer.json"
+          if ((-not (Test-Path $int8Tok)) -and (Test-Path $fp32Tok)) {
+            Copy-Item $fp32Tok $int8Tok
+            Write-Host "Copied tokenizer.json into INT8 dir."
+          }
+
+      - name: Pre-compute verse embeddings
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "embeddings/kjv-qwen3-0.6b.bin")) {
+            bun run export:verses
+            bun run precompute:embeddings
+          } else {
+            Write-Host "Verse embeddings restored from cache; skipping precompute."
+          }
+
       - name: Verify bundled resources exist
         shell: pwsh
         run: |
           $required = @(
             "data/rhema.db",
             "models/whisper/ggml-large-v3-turbo-q8_0.bin",
+            "models/qwen3-embedding-0.6b-int8/model_quantized.onnx",
+            "models/qwen3-embedding-0.6b-int8/tokenizer.json",
+            "embeddings/kjv-qwen3-0.6b.bin",
+            "embeddings/kjv-qwen3-0.6b-ids.bin",
             "sdk/ndi/windows/Processing.NDI.Lib.x64.dll"
           )
           foreach ($f in $required) {

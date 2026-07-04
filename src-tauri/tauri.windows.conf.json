@@ -5,6 +5,10 @@
     "resources": {
       "../data/rhema.db": "./",
       "../models/whisper/ggml-large-v3-turbo-q8_0.bin": "models/whisper/",
+      "../models/qwen3-embedding-0.6b-int8/model_quantized.onnx": "models/qwen3-embedding-0.6b-int8/",
+      "../models/qwen3-embedding-0.6b-int8/tokenizer.json": "models/qwen3-embedding-0.6b-int8/",
+      "../embeddings/kjv-qwen3-0.6b.bin": "embeddings/",
+      "../embeddings/kjv-qwen3-0.6b-ids.bin": "embeddings/",
       "../sdk/ndi/windows/Processing.NDI.Lib.x64.dll": "sdk/ndi/windows/"
     }
   }
