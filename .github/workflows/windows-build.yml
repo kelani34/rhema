@@ -1,0 +1,127 @@
+name: Windows Build
+
+# Builds the Windows installer (.exe via NSIS and .msi via WiX) and uploads
+# them as workflow artifacts. On a version tag (v*) the installers are also
+# attached to a GitHub Release.
+#
+# Trigger manually from the Actions tab (Run workflow) or by pushing a tag.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # needed to create/attach the release on tags
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    env:
+      # whisper-rs builds via bindgen, which needs libclang.dll from LLVM.
+      LIBCLANG_PATH: C:\Program Files\LLVM\bin
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust (MSVC)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Ensure LLVM + CMake (for whisper-rs)
+        shell: pwsh
+        run: |
+          # windows-latest ships LLVM + CMake, but guard against images that don't.
+          if (-not (Test-Path "$env:LIBCLANG_PATH\libclang.dll")) {
+            Write-Host "libclang.dll not found; installing LLVM via choco..."
+            choco install llvm --no-progress -y
+          }
+          if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
+            Write-Host "cmake not found; installing via choco..."
+            choco install cmake --no-progress -y --installargs 'ADD_CMAKE_TO_PATH=System'
+          }
+          Write-Host "Using LIBCLANG_PATH=$env:LIBCLANG_PATH"
+
+      - name: Install JS dependencies
+        run: bun install --frozen-lockfile
+
+      # --- Bundled runtime assets (cached so flaky/large downloads only run once) ---
+
+      - name: Cache Whisper model
+        uses: actions/cache@v4
+        with:
+          path: models/whisper
+          key: whisper-${{ hashFiles('data/download-whisper-model.ts') }}
+
+      - name: Cache NDI SDK
+        uses: actions/cache@v4
+        with:
+          path: sdk/ndi
+          key: ndi-${{ hashFiles('data/download-ndi-sdk.ts') }}
+
+      - name: Cache Bible database
+        uses: actions/cache@v4
+        with:
+          path: data/rhema.db
+          key: bible-db-${{ hashFiles('data/build-bible-db.ts', 'data/download-sources.ts', 'data/schema.sql') }}
+
+      - name: Download Whisper model (~834MB)
+        run: bun run download:whisper
+
+      - name: Download NDI SDK (Windows DLL)
+        run: bun run download:ndi-sdk
+
+      - name: Build Bible database
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "data/rhema.db")) {
+            bun run download:bible-data
+            bun run build:bible
+          } else {
+            Write-Host "data/rhema.db restored from cache; skipping rebuild."
+          }
+
+      - name: Verify bundled resources exist
+        shell: pwsh
+        run: |
+          $required = @(
+            "data/rhema.db",
+            "models/whisper/ggml-large-v3-turbo-q8_0.bin",
+            "sdk/ndi/windows/Processing.NDI.Lib.x64.dll"
+          )
+          foreach ($f in $required) {
+            if (-not (Test-Path $f)) { throw "Missing bundled resource: $f" }
+            Write-Host "OK: $f"
+          }
+
+      # --- Build the installers ---
+
+      - name: Build Tauri app
+        run: bun run tauri build
+
+      - name: Upload installers as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rhema-windows-installers
+          path: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: error
+
+      - name: Attach installers to release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/msi/*.msi

@@ -3,7 +3,7 @@ import { PanelHeader } from "@/components/ui/panel-header"
 import { LevelMeter } from "@/components/ui/level-meter"
 import { Button } from "@/components/ui/button"
 import { ApiKeyPrompt } from "@/components/ui/api-key-prompt"
-import { MicIcon, MicOffIcon } from "lucide-react"
+import { EraserIcon, MicIcon, MicOffIcon } from "lucide-react"
 import {
   useAudioStore,
   useDetectionStore,
@@ -59,6 +59,7 @@ export function TranscriptPanel() {
     stopTranscription,
   } = useTranscription({ onMissingApiKey })
   const hasPartial = useTranscriptStore((s) => s.currentPartial.length > 0)
+  const clearTranscript = useTranscriptStore((s) => s.clearTranscript)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useTauriEvent<{ rms: number; peak: number }>("audio_level", (payload) => {
@@ -277,6 +278,15 @@ export function TranscriptPanel() {
             Start transcribing
           </Button>
         )}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={clearTranscript}
+          disabled={segments.length === 0 && !hasPartial}
+        >
+          <EraserIcon className="size-3" />
+          Clear
+        </Button>
       </div>
 
       <ApiKeyPrompt

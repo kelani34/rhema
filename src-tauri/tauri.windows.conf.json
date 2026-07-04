@@ -1,0 +1,11 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "bundle": {
+    "targets": ["nsis", "msi"],
+    "resources": {
+      "../data/rhema.db": "./",
+      "../models/whisper/ggml-large-v3-turbo-q8_0.bin": "models/whisper/",
+      "../sdk/ndi/windows/Processing.NDI.Lib.x64.dll": "sdk/ndi/windows/"
+    }
+  }
+}
