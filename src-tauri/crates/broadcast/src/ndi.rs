@@ -397,14 +397,28 @@ fn resolve_library_path() -> Result<PathBuf, NdiError> {
         ]
     };
 
-    let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    for candidate in &candidates {
-        if candidate.is_empty() {
-            continue;
+    // Search roots, in priority order:
+    //  1. The dev workspace root (compile-time path) so `tauri dev` works
+    //     from a source checkout.
+    //  2. The directory containing the running executable, which in a
+    //     bundled install is the Tauri resource dir where the DLL/dylib is
+    //     shipped as a bundled resource.
+    let mut roots: Vec<PathBuf> = vec![Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")];
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            roots.push(dir.to_path_buf());
         }
-        let absolute = base.join(candidate);
-        if absolute.exists() {
-            return Ok(absolute);
+    }
+
+    for root in &roots {
+        for candidate in &candidates {
+            if candidate.is_empty() {
+                continue;
+            }
+            let absolute = root.join(candidate);
+            if absolute.exists() {
+                return Ok(absolute);
+            }
         }
     }
 
