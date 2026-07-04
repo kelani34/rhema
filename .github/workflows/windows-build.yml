@@ -37,6 +37,10 @@ jobs:
 
       - name: Install Bun
         uses: oven-sh/setup-bun@v2
+        with:
+          # Pin to match the Bun that generated bun.lock so --frozen-lockfile
+          # stays reproducible across lockfile format changes.
+          bun-version: 1.3.2
 
       - name: Ensure LLVM + CMake (for whisper-rs)
         shell: pwsh
