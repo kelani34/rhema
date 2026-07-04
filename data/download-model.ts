@@ -29,9 +29,17 @@ const MODELS_DIR_INT8 = join(
 
 async function main() {
   // --- Phase 1: Python environment setup ---
+  // Pinned to a known-good set. `sentence-transformers` is intentionally
+  // omitted: when it is installed, optimum auto-selects its
+  // sentence-transformers export path, which crashes on sentence-transformers
+  // v5's read-only `config` property. Without it, optimum exports via the
+  // transformers `feature-extraction` path — the same export that produced
+  // the shipped verse embeddings, so they stay compatible.
   await ensurePythonEnv([
-    "optimum-onnx[onnxruntime]",
-    "sentence-transformers",
+    "optimum-onnx[onnxruntime]==0.1.0",
+    "optimum==2.1.0",
+    "transformers==4.57.6",
+    "onnxruntime==1.25.0",
     "accelerate",
   ])
 
