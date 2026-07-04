@@ -69,17 +69,19 @@ pub fn run() {
 
             memstats::spawn();
 
-            // Try resource dir first (production), then dev fallback
-            let db_path = app
-                .path()
-                .resource_dir()
-                .map(|p| p.join("rhema.db"))
-                .ok()
-                .filter(|p| p.exists())
-                .unwrap_or_else(|| {
-                    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                        .join("../data/rhema.db")
-                });
+            // Try the bundled resource dir first (production), then dev fallback.
+            // The DB is bundled under `data/` in the resource dir.
+            let db_path = {
+                let dev_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("../data/rhema.db");
+                app.path()
+                    .resource_dir()
+                    .map(|p| vec![p.join("data/rhema.db"), p.join("rhema.db")])
+                    .unwrap_or_default()
+                    .into_iter()
+                    .find(|p| p.exists())
+                    .unwrap_or(dev_path)
+            };
 
             if db_path.exists() {
                 let bible_db = rhema_bible::BibleDb::open(&db_path)
