@@ -22,6 +22,9 @@ jobs:
     env:
       # whisper-rs builds via bindgen, which needs libclang.dll from LLVM.
       LIBCLANG_PATH: C:\Program Files\LLVM\bin
+      # GitHub Release holding the prebuilt semantic-search assets
+      # (INT8 model + tokenizer + verse embeddings). Bump when you re-upload.
+      ASSETS_TAG: semantic-assets-v1
 
     steps:
       - name: Checkout
@@ -96,58 +99,40 @@ jobs:
           }
 
       # --- Semantic search assets (ONNX model + verse embeddings) ---
-      # Generated from scratch on cache miss: HuggingFace export + INT8
-      # quantize (Python/optimum) then a Rust precompute over all verses.
+      # Generating these in CI is infeasible: the Rust precompute embeds ~31k
+      # verses at ~0.7s each on a CPU runner (~6h > the 6h job limit). Instead
+      # they are fetched prebuilt from a GitHub Release. Create/refresh it with:
+      #   gh release create $ASSETS_TAG \
+      #     models/qwen3-embedding-0.6b-int8/model_quantized.onnx \
+      #     models/qwen3-embedding-0.6b-int8/tokenizer.json \
+      #     embeddings/kjv-qwen3-0.6b.bin \
+      #     embeddings/kjv-qwen3-0.6b-ids.bin
 
-      - name: Cache ONNX embedding model
+      - name: Cache semantic assets
         uses: actions/cache@v4
         with:
           path: |
-            models/qwen3-embedding-0.6b
             models/qwen3-embedding-0.6b-int8
-          key: onnx-model-${{ hashFiles('data/download-model.ts', 'data/lib/python-env.ts') }}
+            embeddings
+          key: semantic-assets-${{ env.ASSETS_TAG }}
 
-      - name: Cache Python venv
-        uses: actions/cache@v4
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('data/download-model.ts', 'data/lib/python-env.ts') }}
-
-      - name: Cache verse embeddings
-        uses: actions/cache@v4
-        with:
-          path: embeddings
-          key: embeddings-${{ hashFiles('data/compute-embeddings.ts', 'data/build-bible-db.ts', 'data/download-model.ts') }}
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Export + quantize ONNX embedding model
+      - name: Download semantic assets from release
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if (-not (Test-Path "models/qwen3-embedding-0.6b-int8/model_quantized.onnx")) {
-            bun run download:model
+          $model = "models/qwen3-embedding-0.6b-int8/model_quantized.onnx"
+          $emb = "embeddings/kjv-qwen3-0.6b.bin"
+          if ((Test-Path $model) -and (Test-Path $emb)) {
+            Write-Host "Semantic assets restored from cache; skipping download."
           } else {
-            Write-Host "INT8 ONNX model restored from cache; skipping export."
-          }
-          # The app reads the tokenizer from the INT8 dir; ensure it's present.
-          $int8Tok = "models/qwen3-embedding-0.6b-int8/tokenizer.json"
-          $fp32Tok = "models/qwen3-embedding-0.6b/tokenizer.json"
-          if ((-not (Test-Path $int8Tok)) -and (Test-Path $fp32Tok)) {
-            Copy-Item $fp32Tok $int8Tok
-            Write-Host "Copied tokenizer.json into INT8 dir."
-          }
-
-      - name: Pre-compute verse embeddings
-        shell: pwsh
-        run: |
-          if (-not (Test-Path "embeddings/kjv-qwen3-0.6b.bin")) {
-            bun run export:verses
-            bun run precompute:embeddings
-          } else {
-            Write-Host "Verse embeddings restored from cache; skipping precompute."
+            New-Item -ItemType Directory -Force -Path "models/qwen3-embedding-0.6b-int8", "embeddings" | Out-Null
+            gh release download $env:ASSETS_TAG --repo $env:GITHUB_REPOSITORY --clobber `
+              --dir "models/qwen3-embedding-0.6b-int8" `
+              --pattern "model_quantized.onnx" --pattern "tokenizer.json"
+            gh release download $env:ASSETS_TAG --repo $env:GITHUB_REPOSITORY --clobber `
+              --dir "embeddings" `
+              --pattern "kjv-qwen3-0.6b.bin" --pattern "kjv-qwen3-0.6b-ids.bin"
           }
 
       - name: Verify bundled resources exist
