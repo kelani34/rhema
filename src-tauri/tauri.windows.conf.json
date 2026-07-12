@@ -3,13 +3,13 @@
   "bundle": {
     "targets": ["nsis", "msi"],
     "resources": {
-      "../data/rhema.db": "data/",
-      "../models/whisper/ggml-large-v3-turbo-q8_0.bin": "models/whisper/",
-      "../models/qwen3-embedding-0.6b-int8/model_quantized.onnx": "models/qwen3-embedding-0.6b-int8/",
-      "../models/qwen3-embedding-0.6b-int8/tokenizer.json": "models/qwen3-embedding-0.6b-int8/",
-      "../embeddings/kjv-qwen3-0.6b.bin": "embeddings/",
-      "../embeddings/kjv-qwen3-0.6b-ids.bin": "embeddings/",
-      "../sdk/ndi/windows/Processing.NDI.Lib.x64.dll": "sdk/ndi/windows/"
+      "../data/rhema.db": "data/rhema.db",
+      "../models/whisper/ggml-large-v3-turbo-q8_0.bin": "models/whisper/ggml-large-v3-turbo-q8_0.bin",
+      "../models/qwen3-embedding-0.6b-int8/model_quantized.onnx": "models/qwen3-embedding-0.6b-int8/model_quantized.onnx",
+      "../models/qwen3-embedding-0.6b-int8/tokenizer.json": "models/qwen3-embedding-0.6b-int8/tokenizer.json",
+      "../embeddings/kjv-qwen3-0.6b.bin": "embeddings/kjv-qwen3-0.6b.bin",
+      "../embeddings/kjv-qwen3-0.6b-ids.bin": "embeddings/kjv-qwen3-0.6b-ids.bin",
+      "../sdk/ndi/windows/Processing.NDI.Lib.x64.dll": "sdk/ndi/windows/Processing.NDI.Lib.x64.dll"
     }
   }
 }
